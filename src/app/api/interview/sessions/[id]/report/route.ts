@@ -6,7 +6,7 @@ import type { ReportRow } from "@/lib/session-types";
 export const dynamic = "force-dynamic";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -16,8 +16,9 @@ export async function POST(
       return NextResponse.json({ error: "Invalid session id" }, { status: 400 });
     }
 
-    const answers = answersStore.get(sessionId) ?? [];
-    const questions = questionsStore.get(sessionId) ?? [];
+    const body = await request.json().catch(() => ({})) as Record<string, any>;
+    const answers = (answersStore.get(sessionId) ?? body.answers ?? []) as any[];
+    const questions = (questionsStore.get(sessionId) ?? body.questions ?? []) as any[];
 
     if (!answers.length) {
       return NextResponse.json(
@@ -26,8 +27,8 @@ export async function POST(
       );
     }
 
-    const enriched = answers.map((answer) => {
-      const question = questions.find((q) => q.id === answer.questionId);
+    const enriched = answers.map((answer: any) => {
+      const question = questions.find((q: any) => q.id === answer.questionId);
       return {
         category: question?.category ?? "Technical",
         skill: question?.skill ?? "",

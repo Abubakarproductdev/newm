@@ -78,8 +78,36 @@ export default function InterviewStudio() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadHistory();
     fetch("/api/interview/voice").then((r) => r.json()).then(setCapabilities).catch(() => setCapabilities(null));
+
+    try {
+      const activeRaw = localStorage.getItem("careermate_active");
+      if (activeRaw) {
+        const active = JSON.parse(activeRaw);
+        if (active && active.session && active.stage === "live") {
+          setSession(active.session);
+          setQuestions(active.questions || []);
+          setAnswers(active.answers || []);
+          setIndex(active.index || 0);
+          setPhase(active.phase || "asking");
+          setStage("live");
+        }
+      }
+    } catch { /* ignore parse errors */ }
+
     return () => stopSpeaking();
   }, [loadHistory]);
+
+  useEffect(() => {
+    if (stage === "live" && session) {
+      try {
+        localStorage.setItem("careermate_active", JSON.stringify({
+          stage, phase, session, questions, answers, index
+        }));
+      } catch { /* ignore quota errors */ }
+    } else if (stage === "setup") {
+      localStorage.removeItem("careermate_active");
+    }
+  }, [stage, phase, session, questions, answers, index]);
 
   /* Reads each question aloud, then hands over to the microphone. */
   useEffect(() => {
@@ -135,7 +163,13 @@ export default function InterviewStudio() {
     try {
       const res = await fetch("/api/interview/answers", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, questionId: currentQuestion.id, transcript, inputMode: dictation.listening || transcript.length > 0 ? "voice" : "text" }),
+        body: JSON.stringify({ 
+          sessionId: session.id, 
+          questionId: currentQuestion.id, 
+          transcript, 
+          inputMode: dictation.listening || transcript.length > 0 ? "voice" : "text",
+          session, question: currentQuestion, questions // fallback for serverless memory wipes
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not evaluate the answer.");
@@ -151,10 +185,15 @@ export default function InterviewStudio() {
     if (!session) return;
     setBusy("Preparing your report…"); setAnswerError("");
     try {
-      const res = await fetch(`/api/interview/sessions/${session.id}/report`, { method: "POST" });
+      const res = await fetch(`/api/interview/sessions/${session.id}/report`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session, questions, answers })
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not build the report.");
       setReport(data.report); setStage("report"); loadHistory();
+      localStorage.removeItem("careermate_active");
       // Update session status in localStorage
       try {
         const stored = localStorage.getItem("careermate_history");

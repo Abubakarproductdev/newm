@@ -27,11 +27,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const session = sessionsStore.get(sessionId);
+    const fallbackSession = body.session as any;
+    const fallbackQuestion = body.question as any;
+
+    const session = sessionsStore.get(sessionId) || fallbackSession;
     const questions = questionsStore.get(sessionId) ?? [];
     const question = questions.find(
       (q) => q.id === questionId && q.sessionId === sessionId
-    );
+    ) || fallbackQuestion;
 
     if (!session || !question) {
       return NextResponse.json(
@@ -39,6 +42,7 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
+
 
     // Try AI evaluation; fall back to heuristic engine
     const aiEvaluation = await aiEvaluateAnswer({
